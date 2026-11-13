@@ -3,7 +3,9 @@ package server
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +18,7 @@ import (
 )
 
 func TestRoutes(t *testing.T) {
-	handler := New()
+	handler := New(log.New(io.Discard, "", 0))
 
 	tests := []struct {
 		name       string
@@ -47,7 +49,7 @@ func TestRoutes(t *testing.T) {
 			}
 
 			if tt.wantStatus == http.StatusMethodNotAllowed {
-				if got := rec.Header().Get("Allow"); got != http.MethodGet {
+				if got := rec.Header().Get("Allow"); got != "GET, HEAD" {
 					t.Errorf("expected Allow: GET, got %q", got)
 				}
 			}
@@ -83,7 +85,7 @@ func TestRoutes(t *testing.T) {
 
 // Malformed HTTP syntax is rejected by net/http before a handler is called.
 func TestMalformedHTTPRequest(t *testing.T) {
-	ts := httptest.NewServer(New())
+	ts := httptest.NewServer(New(log.New(io.Discard, "", 0)))
 	defer ts.Close()
 
 	address := strings.TrimPrefix(ts.URL, "http://")
@@ -115,5 +117,72 @@ func TestMalformedHTTPRequest(t *testing.T) {
 
 	if !strings.Contains(statusLine, "400 Bad Request") {
 		t.Fatalf("expected 400 Bad Request, got %q", statusLine)
+	}
+}
+
+func TestHeadHealthHasNoBody(t *testing.T) {
+	logger := log.New(io.Discard, "", 0)
+	ts := httptest.NewServer(New(logger))
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodHead, ts.URL+"/healthz", nil)
+	if err != nil {
+		t.Fatalf("create HEAD request: %v", err)
+	}
+
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("send HEAD request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+
+	if len(body) != 0 {
+		t.Fatalf("HEAD response should have no body, got %q", body)
+	}
+
+	if resp.Header.Get("X-Request-ID") == "" {
+		t.Error("expected request ID response header")
+	}
+}
+
+func TestServeMuxSpecificity(t *testing.T) {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /places/{id}", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, "place:%s", r.PathValue("id"))
+	})
+
+	mux.HandleFunc("GET /places/search", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "static-search-route")
+	})
+
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"/places/search", "static-search-route"},
+		{"/places/123", "place:123"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+
+			mux.ServeHTTP(rec, req)
+
+			if rec.Body.String() != tt.want {
+				t.Fatalf("expected %q, got %q", tt.want, rec.Body.String())
+			}
+		})
 	}
 }

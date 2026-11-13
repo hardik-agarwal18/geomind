@@ -51,7 +51,7 @@ func ReadyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func requireGET(w http.ResponseWriter, r *http.Request) bool {
-	if r.Method == http.MethodGet {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		return true
 	}
 

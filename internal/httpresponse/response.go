@@ -53,12 +53,12 @@ func WriteError(
 
 // WriteMethodNotAllowed rejects unsupported HTTP methods.
 func WriteMethodNotAllowed(w http.ResponseWriter) error {
-	w.Header().Set("Allow", http.MethodGet)
+	w.Header().Set("Allow", "GET, HEAD")
 
 	return WriteError(
 		w,
 		http.StatusMethodNotAllowed,
 		"method_not_allowed",
-		"Only GET is supported",
+		"Only GET and HEAD are supported",
 	)
 }

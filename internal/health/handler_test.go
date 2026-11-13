@@ -82,7 +82,7 @@ func TestHandlersRejectUnsupportedMethods(t *testing.T) {
 				t.Fatalf("expected 405, got %d", rec.Code)
 			}
 
-			if got := rec.Header().Get("Allow"); got != http.MethodGet {
+			if got := rec.Header().Get("Allow"); got != "GET, HEAD" {
 				t.Errorf("expected Allow: GET, got %q", got)
 			}
 
@@ -96,7 +96,7 @@ func TestHandlersRejectUnsupportedMethods(t *testing.T) {
 				t.Errorf("unexpected error code: %q", response.Error.Code)
 			}
 
-			if response.Error.Message != "Only GET is supported" {
+			if response.Error.Message != "Only GET and HEAD are supported" {
 				t.Errorf("unexpected error message: %q", response.Error.Message)
 			}
 		})

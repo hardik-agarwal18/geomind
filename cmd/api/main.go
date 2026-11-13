@@ -10,7 +10,7 @@ import (
 func main() {
 	addr := ":8080"
 
-	handler := server.New()
+	handler := server.New(log.Default())
 
 	log.Printf("GeoMind API listening on %s", addr)
 
