@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"geomind/internal/httpresponse"
@@ -20,30 +20,36 @@ func RequestIDFromContext(ctx context.Context) string {
 	return id
 }
 
-func RequestID(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id, err := newRequestID()
-		if err != nil {
-			log.Printf("request ID generation failed: %v", err)
+func RequestID(logger *slog.Logger) Middleware {
+	if logger == nil {
+		logger = slog.Default()
+	}
 
-			if writeErr := httpresponse.WriteError(
-				w,
-				http.StatusInternalServerError,
-				"internal_error",
-				"Internal server error",
-			); writeErr != nil {
-				log.Printf("failed to write error response: %v", writeErr)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			id, err := newRequestID()
+			if err != nil {
+				logger.Error("request ID generation failed", "error", err)
+
+				if writeErr := httpresponse.WriteError(
+					w,
+					http.StatusInternalServerError,
+					"internal_error",
+					"Internal server error",
+				); writeErr != nil {
+					logger.Error("failed to write error response", "error", writeErr)
+				}
+
+				return
 			}
 
-			return
-		}
+			ctx := context.WithValue(r.Context(), requestIDKey{}, id)
 
-		ctx := context.WithValue(r.Context(), requestIDKey{}, id)
+			w.Header().Set(RequestIDHeader, id)
 
-		w.Header().Set(RequestIDHeader, id)
-
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }
 
 func newRequestID() (string, error) {

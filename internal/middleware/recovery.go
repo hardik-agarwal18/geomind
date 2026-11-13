@@ -1,16 +1,17 @@
 package middleware
 
 import (
-	"log"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"runtime/debug"
 
 	"geomind/internal/httpresponse"
 )
 
-func Recovery(logger *log.Logger) Middleware {
+func Recovery(logger *slog.Logger) Middleware {
 	if logger == nil {
-		logger = log.Default()
+		logger = slog.Default()
 	}
 
 	return func(next http.Handler) http.Handler {
@@ -25,15 +26,13 @@ func Recovery(logger *log.Logger) Middleware {
 					return
 				}
 
-				// Record panic type and stack, but not the panic value.
-				logger.Printf(
-					"panic_recovered request_id=%s panic_type=%T stack=%s",
-					RequestIDFromContext(r.Context()),
-					recovered,
-					debug.Stack(),
+				logger.Error(
+					"panic_recovered",
+					slog.String("request_id", RequestIDFromContext(r.Context())),
+					slog.String("panic_type", fmt.Sprintf("%T", recovered)),
+					slog.String("stack", string(debug.Stack())),
 				)
 
-				// A committed response cannot be replaced with a 500.
 				if recorder.WroteFinalResponse() {
 					return
 				}
@@ -44,9 +43,9 @@ func Recovery(logger *log.Logger) Middleware {
 					"internal_error",
 					"Internal server error",
 				); err != nil {
-					logger.Printf(
-						"failed to write panic recovery response: %v",
-						err,
+					logger.Error(
+						"failed to write panic recovery response",
+						"error", err,
 					)
 				}
 			}()

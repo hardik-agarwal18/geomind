@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -17,8 +17,12 @@ import (
 	"geomind/internal/httpresponse"
 )
 
+func newServerTestLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
 func TestRoutes(t *testing.T) {
-	handler := New(log.New(io.Discard, "", 0))
+	handler := New(newServerTestLogger())
 
 	tests := []struct {
 		name       string
@@ -50,7 +54,7 @@ func TestRoutes(t *testing.T) {
 
 			if tt.wantStatus == http.StatusMethodNotAllowed {
 				if got := rec.Header().Get("Allow"); got != "GET, HEAD" {
-					t.Errorf("expected Allow: GET, got %q", got)
+					t.Errorf("expected Allow: GET, HEAD, got %q", got)
 				}
 			}
 
@@ -66,6 +70,7 @@ func TestRoutes(t *testing.T) {
 				if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
 					t.Fatalf("decode method error: %v", err)
 				}
+
 				if response.Error.Code != "method_not_allowed" {
 					t.Errorf("unexpected error code: %q", response.Error.Code)
 				}
@@ -75,6 +80,7 @@ func TestRoutes(t *testing.T) {
 				if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
 					t.Fatalf("decode not found error: %v", err)
 				}
+
 				if response.Error.Code != "not_found" {
 					t.Errorf("unexpected error code: %q", response.Error.Code)
 				}
@@ -85,7 +91,7 @@ func TestRoutes(t *testing.T) {
 
 // Malformed HTTP syntax is rejected by net/http before a handler is called.
 func TestMalformedHTTPRequest(t *testing.T) {
-	ts := httptest.NewServer(New(log.New(io.Discard, "", 0)))
+	ts := httptest.NewServer(New(newServerTestLogger()))
 	defer ts.Close()
 
 	address := strings.TrimPrefix(ts.URL, "http://")
@@ -121,8 +127,7 @@ func TestMalformedHTTPRequest(t *testing.T) {
 }
 
 func TestHeadHealthHasNoBody(t *testing.T) {
-	logger := log.New(io.Discard, "", 0)
-	ts := httptest.NewServer(New(logger))
+	ts := httptest.NewServer(New(newServerTestLogger()))
 	defer ts.Close()
 
 	req, err := http.NewRequest(http.MethodHead, ts.URL+"/healthz", nil)

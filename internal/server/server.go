@@ -1,7 +1,7 @@
 package server
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 
 	"geomind/internal/health"
@@ -9,32 +9,28 @@ import (
 	"geomind/internal/middleware"
 )
 
-func New(logger *log.Logger) http.Handler {
+func New(logger *slog.Logger) http.Handler {
 	if logger == nil {
-		logger = log.Default()
+		logger = slog.Default()
 	}
 
 	mux := http.NewServeMux()
 
-	// Method-aware routes.
 	mux.HandleFunc("GET /healthz", health.Handler)
 	mux.HandleFunc("GET /readyz", health.ReadyHandler)
 
-	// Exact-path fallbacks for unsupported methods.
-	// GET-specific patterns take precedence for GET and HEAD.
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if err := httpresponse.WriteMethodNotAllowed(w); err != nil {
-			logger.Printf("failed to write health method error: %v", err)
+			logger.Error("failed to write health method error", "error", err)
 		}
 	})
 
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		if err := httpresponse.WriteMethodNotAllowed(w); err != nil {
-			logger.Printf("failed to write readiness method error: %v", err)
+			logger.Error("failed to write readiness method error", "error", err)
 		}
 	})
 
-	// Catch-all for unknown paths.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if err := httpresponse.WriteError(
 			w,
@@ -42,14 +38,13 @@ func New(logger *log.Logger) http.Handler {
 			"not_found",
 			"Resource not found",
 		); err != nil {
-			logger.Printf("failed to write not found response: %v", err)
+			logger.Error("failed to write not found response", "error", err)
 		}
 	})
 
-	// Request execution order: RequestID -> AccessLog -> Recovery -> ServeMux.
 	return middleware.Chain(
 		mux,
-		middleware.RequestID,
+		middleware.RequestID(logger),
 		middleware.AccessLog(logger),
 		middleware.Recovery(logger),
 	)

@@ -4,26 +4,40 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
+	"geomind/internal/config"
+	"geomind/internal/logging"
 	"geomind/internal/server"
 )
 
 func main() {
 	if err := run(); err != nil {
-		log.Fatal(err)
+		fmt.Fprintf(os.Stderr, "GeoMind stopped with error: %v\n", err)
+		os.Exit(1)
 	}
 }
 
 func run() error {
-	logger := log.Default()
+	// 1. Load and validate configuration.
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load configuration: %w", err)
+	}
 
-	// Context representing the application's lifetime.
+	// 2. Create structured logger.
+	logger := logging.New(cfg)
+
+	logger.Info(
+		"application_starting",
+		"environment", cfg.AppEnv,
+		"address", cfg.HTTPAddr,
+	)
+
+	// 3. Create application signal context.
 	appCtx, stop := signal.NotifyContext(
 		context.Background(),
 		os.Interrupt,
@@ -31,14 +45,15 @@ func run() error {
 	)
 	defer stop()
 
+	// 4. Construct HTTP handler and server.
 	handler := server.New(logger)
-	srv := server.NewHTTPServer(":8080", handler)
+	srv := server.NewHTTPServer(cfg, handler)
 
+	// 5. Start HTTP server.
 	serverErr := make(chan error, 1)
 
-	// Start the HTTP server in a separate goroutine.
 	go func() {
-		logger.Printf("GeoMind API listening on %s", srv.Addr)
+		logger.Info("http_server_started", "address", srv.Addr)
 
 		err := srv.ListenAndServe()
 
@@ -50,36 +65,38 @@ func run() error {
 		serverErr <- nil
 	}()
 
+	// 6. Wait for shutdown signal or server failure.
 	select {
 	case <-appCtx.Done():
-		logger.Println("Shutdown signal received")
-
-		// Restore default signal handling.
-		// A second Ctrl+C can force termination.
+		logger.Info("shutdown_signal_received")
 		stop()
 
 	case err := <-serverErr:
 		return err
 	}
 
-	// Give active HTTP requests up to 10 seconds to finish.
+	// 7. Give active requests time to finish.
 	shutdownCtx, cancel := context.WithTimeout(
 		context.Background(),
-		10*time.Second,
+		cfg.ShutdownTimeout,
 	)
 	defer cancel()
 
-	logger.Println("Starting graceful HTTP shutdown")
+	logger.Info(
+		"http_server_shutdown_started",
+		"timeout", cfg.ShutdownTimeout,
+	)
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.Printf("Graceful shutdown failed: %v", err)
+		logger.Error(
+			"graceful_shutdown_failed",
+			"error", err,
+		)
 
-		// Force-close connections if the deadline expires.
 		if closeErr := srv.Close(); closeErr != nil {
 			return errors.Join(err, closeErr)
 		}
 
-		// Wait for the server goroutine to exit.
 		<-serverErr
 
 		return fmt.Errorf("HTTP shutdown failed: %w", err)
@@ -89,6 +106,10 @@ func run() error {
 		return err
 	}
 
-	logger.Println("GeoMind API stopped successfully")
+	logger.Info("application_stopped")
 	return nil
 }
+
+// Keep this assertion to ensure our configured server implements the
+// standard HTTP server interface expected by the application.
+var _ http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})

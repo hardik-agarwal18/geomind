@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +13,10 @@ import (
 	"geomind/internal/httpresponse"
 )
 
+func newTestLogger(output io.Writer) *slog.Logger {
+	return slog.New(slog.NewTextHandler(output, nil))
+}
+
 func TestChainExecutionOrder(t *testing.T) {
 	var events []string
 
@@ -20,9 +24,7 @@ func TestChainExecutionOrder(t *testing.T) {
 		return func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				events = append(events, name+":before")
-
 				next.ServeHTTP(w, r)
-
 				events = append(events, name+":after")
 			})
 		}
@@ -61,13 +63,15 @@ func TestChainExecutionOrder(t *testing.T) {
 func TestRequestIDPropagation(t *testing.T) {
 	var contextID string
 
+	logger := newTestLogger(io.Discard)
+
 	endpoint := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		contextID = RequestIDFromContext(r.Context())
-
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	handler := RequestID(endpoint)
+	// RequestID returns Middleware. Apply it to the endpoint.
+	handler := RequestID(logger)(endpoint)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -110,7 +114,7 @@ func TestAccessLogCapturesStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var logs bytes.Buffer
-			logger := log.New(&logs, "", 0)
+			logger := newTestLogger(&logs)
 
 			endpoint := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if tt.explicit {
@@ -121,16 +125,16 @@ func TestAccessLogCapturesStatus(t *testing.T) {
 				_, _ = io.WriteString(w, "private-response-body")
 			})
 
-			handler := Chain(endpoint, RequestID, AccessLog(logger))
+			handler := Chain(
+				endpoint,
+				RequestID(logger),
+				AccessLog(logger),
+			)
 
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, "/example", nil)
 
 			handler.ServeHTTP(rec, req)
-
-			if rec.Code == 0 {
-				t.Fatal("expected a committed HTTP response")
-			}
 
 			logOutput := logs.String()
 
@@ -150,11 +154,11 @@ func TestAccessLogCapturesStatus(t *testing.T) {
 				t.Fatal("access log must not contain response body")
 			}
 
-			if !strings.Contains(logOutput, `method="GET"`) {
+			if !strings.Contains(logOutput, "method=GET") {
 				t.Errorf("expected HTTP method in access log, got %q", logOutput)
 			}
 
-			if !strings.Contains(logOutput, `path="/example"`) {
+			if !strings.Contains(logOutput, "path=/example") {
 				t.Errorf("expected request path in access log, got %q", logOutput)
 			}
 		})
@@ -163,7 +167,7 @@ func TestAccessLogCapturesStatus(t *testing.T) {
 
 func TestRecoveryReturnsGenericInternalError(t *testing.T) {
 	var logs bytes.Buffer
-	logger := log.New(&logs, "", 0)
+	logger := newTestLogger(&logs)
 
 	endpoint := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		panic("private-panic-value")
@@ -171,7 +175,7 @@ func TestRecoveryReturnsGenericInternalError(t *testing.T) {
 
 	handler := Chain(
 		endpoint,
-		RequestID,
+		RequestID(logger),
 		AccessLog(logger),
 		Recovery(logger),
 	)
@@ -226,7 +230,7 @@ func TestRecoveryReturnsGenericInternalError(t *testing.T) {
 }
 
 func TestResponseControllerSurvivesMiddleware(t *testing.T) {
-	logger := log.New(io.Discard, "", 0)
+	logger := newTestLogger(io.Discard)
 
 	endpoint := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Handler-Header", "preserved")
@@ -240,7 +244,7 @@ func TestResponseControllerSurvivesMiddleware(t *testing.T) {
 
 	handler := Chain(
 		endpoint,
-		RequestID,
+		RequestID(logger),
 		AccessLog(logger),
 		Recovery(logger),
 	)

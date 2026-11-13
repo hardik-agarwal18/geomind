@@ -1,14 +1,14 @@
 package middleware
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 )
 
-func AccessLog(logger *log.Logger) Middleware {
+func AccessLog(logger *slog.Logger) Middleware {
 	if logger == nil {
-		logger = log.Default()
+		logger = slog.Default()
 	}
 
 	return func(next http.Handler) http.Handler {
@@ -20,16 +20,14 @@ func AccessLog(logger *log.Logger) Middleware {
 			}
 
 			defer func() {
-				duration := time.Since(start)
-
-				logger.Printf(
-					"http_request request_id=%s method=%q path=%q status=%d bytes=%d duration=%s",
-					RequestIDFromContext(r.Context()),
-					r.Method,
-					r.URL.Path,
-					recorder.StatusCode(),
-					recorder.bytes,
-					duration,
+				logger.Info(
+					"http_request",
+					slog.String("request_id", RequestIDFromContext(r.Context())),
+					slog.String("method", r.Method),
+					slog.String("path", r.URL.Path),
+					slog.Int("status", recorder.StatusCode()),
+					slog.Int64("bytes", recorder.bytes),
+					slog.Duration("duration", time.Since(start)),
 				)
 			}()
 

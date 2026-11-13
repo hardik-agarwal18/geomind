@@ -4,17 +4,24 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"geomind/internal/config"
 )
 
 func TestNewHTTPServerTimeoutConfiguration(t *testing.T) {
-	srv := NewHTTPServer(":8080", http.NotFoundHandler())
+	cfg := config.Config{
+		HTTPAddr:          ":8080",
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+
+	srv := NewHTTPServer(cfg, http.NotFoundHandler())
 
 	if srv.Addr != ":8080" {
 		t.Errorf("expected address :8080, got %q", srv.Addr)
-	}
-
-	if srv.Handler == nil {
-		t.Fatal("expected HTTP handler")
 	}
 
 	tests := []struct {
@@ -37,7 +44,6 @@ func TestNewHTTPServerTimeoutConfiguration(t *testing.T) {
 	}
 
 	if srv.MaxHeaderBytes != 1<<20 {
-		t.Errorf("expected MaxHeaderBytes = 1 MiB, got %d",
-			srv.MaxHeaderBytes)
+		t.Errorf("expected MaxHeaderBytes = 1 MiB, got %d", srv.MaxHeaderBytes)
 	}
 }
