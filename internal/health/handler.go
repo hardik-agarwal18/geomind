@@ -3,14 +3,61 @@ package health
 import (
 	"log"
 	"net/http"
+
+	"geomind/internal/httpresponse"
 )
 
-func Handler(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
+type StatusResponse struct {
+	Status  string `json:"status"`
+	Service string `json:"service"`
+}
 
-	_, err := w.Write([]byte("{\"status\":\"ok\",\"service\":\"geomind-api\"}\n"))
-	if err != nil {
-		log.Printf("failed to write health response: %v", err)
+func Handler(w http.ResponseWriter, r *http.Request) {
+	if !requireGET(w, r) {
+		return
 	}
+
+	response := StatusResponse{
+		Status:  "ok",
+		Service: "geomind-api",
+	}
+
+	if err := httpresponse.WriteJSON(
+		w,
+		http.StatusOK,
+		response,
+	); err != nil {
+		log.Printf("health response failed: %v", err)
+	}
+}
+
+func ReadyHandler(w http.ResponseWriter, r *http.Request) {
+	if !requireGET(w, r) {
+		return
+	}
+
+	response := StatusResponse{
+		Status:  "ready",
+		Service: "geomind-api",
+	}
+
+	if err := httpresponse.WriteJSON(
+		w,
+		http.StatusOK,
+		response,
+	); err != nil {
+		log.Printf("readiness response failed: %v", err)
+	}
+}
+
+func requireGET(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method == http.MethodGet {
+		return true
+	}
+
+	if err := httpresponse.WriteMethodNotAllowed(w); err != nil {
+		log.Printf("failed to write method error response: %v", err)
+	}
+
+	return false
 }
