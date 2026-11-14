@@ -19,21 +19,28 @@ func TestCoordinateValidate(t *testing.T) {
 			},
 		},
 		{
-			name: "valid origin",
+			name: "valid zero coordinate",
 			input: Coordinate{
 				Longitude: 0,
 				Latitude:  0,
 			},
 		},
 		{
-			name: "valid boundary",
+			name: "valid maximum boundary",
 			input: Coordinate{
 				Longitude: 180,
 				Latitude:  90,
 			},
 		},
 		{
-			name: "longitude too high",
+			name: "valid negative boundary",
+			input: Coordinate{
+				Longitude: -180,
+				Latitude:  -90,
+			},
+		},
+		{
+			name: "invalid longitude high",
 			input: Coordinate{
 				Longitude: 181,
 				Latitude:  12,
@@ -41,7 +48,7 @@ func TestCoordinateValidate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "longitude too low",
+			name: "invalid longitude low",
 			input: Coordinate{
 				Longitude: -181,
 				Latitude:  12,
@@ -49,7 +56,7 @@ func TestCoordinateValidate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "latitude too high",
+			name: "invalid latitude high",
 			input: Coordinate{
 				Longitude: 77,
 				Latitude:  91,
@@ -57,7 +64,7 @@ func TestCoordinateValidate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "latitude too low",
+			name: "invalid latitude low",
 			input: Coordinate{
 				Longitude: 77,
 				Latitude:  -91,
@@ -96,7 +103,7 @@ func TestCoordinateValidate(t *testing.T) {
 
 			if (err != nil) != tt.wantErr {
 				t.Fatalf(
-					"Validate() error = %v, wantErr %v",
+					"Validate() error = %v, wantErr = %v",
 					err,
 					tt.wantErr,
 				)
