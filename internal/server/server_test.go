@@ -191,3 +191,105 @@ func TestServeMuxSpecificity(t *testing.T) {
 		})
 	}
 }
+
+func TestNearbyPlacesRoute(t *testing.T) {
+	nearbyHandler := http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			if got := r.URL.Query().Get("latitude"); got != "12.9716" {
+				t.Errorf("unexpected latitude: %q", got)
+			}
+
+			w.Header().Set(
+				"Content-Type",
+				"application/json; charset=utf-8",
+			)
+
+			w.WriteHeader(http.StatusOK)
+
+			_, _ = io.WriteString(
+				w,
+				`{"status":"nearby handler reached"}`,
+			)
+		},
+	)
+
+	handler := NewWithNearbyPlaces(
+		newServerTestLogger(),
+		nearbyHandler,
+	)
+
+	t.Run("GET nearby places", func(t *testing.T) {
+		req := httptest.NewRequest(
+			http.MethodGet,
+			"/api/v1/places/nearby?latitude=12.9716&longitude=77.5946",
+			nil,
+		)
+
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf(
+				"expected 200, got %d",
+				rec.Code,
+			)
+		}
+
+		if !strings.Contains(
+			rec.Body.String(),
+			"nearby handler reached",
+		) {
+			t.Fatalf(
+				"nearby handler was not reached: %s",
+				rec.Body.String(),
+			)
+		}
+
+		if rec.Header().Get("X-Request-ID") == "" {
+			t.Error("expected request ID response header")
+		}
+	})
+
+	t.Run("POST nearby places is rejected", func(t *testing.T) {
+		req := httptest.NewRequest(
+			http.MethodPost,
+			"/api/v1/places/nearby",
+			nil,
+		)
+
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Fatalf(
+				"expected 405, got %d",
+				rec.Code,
+			)
+		}
+
+		if got := rec.Header().Get("Allow"); got != "GET, HEAD" {
+			t.Errorf(
+				"expected Allow GET, HEAD, got %q",
+				got,
+			)
+		}
+
+		var response httpresponse.ErrorResponse
+
+		if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+			t.Fatalf(
+				"decode error response: %v",
+				err,
+			)
+		}
+
+		if response.Error.Code != "method_not_allowed" {
+			t.Errorf(
+				"unexpected error code: %q",
+				response.Error.Code,
+			)
+		}
+	})
+}

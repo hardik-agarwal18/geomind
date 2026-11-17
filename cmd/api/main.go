@@ -11,7 +11,9 @@ import (
 
 	"geomind/internal/config"
 	"geomind/internal/database"
+	"geomind/internal/httpapi"
 	"geomind/internal/logging"
+	"geomind/internal/places"
 	"geomind/internal/server"
 )
 
@@ -34,7 +36,7 @@ func run() error {
 
 	logger.Info(
 		"application_starting",
-		"environment", cfg.AppEnv,
+		// "environment", cfg.AppEnv,
 		"address", cfg.HTTPAddr,
 	)
 
@@ -67,7 +69,21 @@ func run() error {
 	)
 
 	// 4. Construct HTTP handler and server.
-	handler := server.New(logger)
+	placeRepository := places.NewRepository(pool)
+
+	placeService := places.NewService(
+		placeRepository,
+	)
+
+	nearbyHandler := httpapi.NewNearbyPlacesHandler(
+		placeService,
+		logger,
+	)
+
+	handler := server.NewWithNearbyPlaces(
+		logger,
+		nearbyHandler,
+	)
 	srv := server.NewHTTPServer(cfg, handler)
 
 	// 5. Start HTTP server.

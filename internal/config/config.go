@@ -109,6 +109,17 @@ func load(lookup lookupEnv) (Config, error) {
 		return Config{}, fmt.Errorf("invalid HTTP_ADDR: %w", err)
 	}
 
+	// Load and validate database configuration.
+	databaseConfig, err := loadDatabase(lookup)
+	if err != nil {
+		return Config{}, fmt.Errorf(
+			"load database configuration: %w",
+			err,
+		)
+	}
+
+	cfg.Database = databaseConfig
+
 	return cfg, nil
 }
 

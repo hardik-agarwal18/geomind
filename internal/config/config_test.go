@@ -7,8 +7,17 @@ import (
 )
 
 func lookupFrom(values map[string]string) lookupEnv {
+	defaults := map[string]string{
+		"DATABASE_URL": "postgres://test:test@localhost:5433/geomind",
+	}
+
+	// Test-specific settings override defaults.
+	for key, value := range values {
+		defaults[key] = value
+	}
+
 	return func(key string) (string, bool) {
-		value, ok := values[key]
+		value, ok := defaults[key]
 		return value, ok
 	}
 }
