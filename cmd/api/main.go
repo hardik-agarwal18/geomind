@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"geomind/internal/config"
+	"geomind/internal/database"
 	"geomind/internal/logging"
 	"geomind/internal/server"
 )
@@ -44,6 +45,26 @@ func run() error {
 		syscall.SIGTERM,
 	)
 	defer stop()
+
+	pool, err := database.NewPool(
+		appCtx,
+		cfg.Database,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"initialize database: %w",
+			err,
+		)
+	}
+
+	// Pool remains alive throughout the application lifecycle.
+	defer database.ClosePool(pool)
+
+	logger.Info(
+		"database_pool_ready",
+		"max_connections",
+		cfg.Database.MaxConns,
+	)
 
 	// 4. Construct HTTP handler and server.
 	handler := server.New(logger)

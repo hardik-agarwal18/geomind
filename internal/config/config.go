@@ -21,6 +21,8 @@ type Config struct {
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
 	MaxHeaderBytes    int
+
+	Database DatabaseConfig
 }
 
 type lookupEnv func(string) (string, bool)
@@ -154,4 +156,17 @@ func validateHTTPAddr(addr string) error {
 	}
 
 	return nil
+}
+
+type DatabaseConfig struct {
+	URL string
+
+	MaxConns int32
+	MinConns int32
+
+	MaxConnLifetime time.Duration
+	MaxConnIdleTime time.Duration
+
+	HealthCheckPeriod time.Duration
+	ConnectTimeout    time.Duration
 }
